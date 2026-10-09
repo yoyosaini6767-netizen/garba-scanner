@@ -1,0 +1,749 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>The Maharaja Events - Gate Scanner</title>
+  
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+  <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+
+  <style>
+    :root {
+      --bg-dark: #0a0b10;
+      --card-bg: #141622;
+      --card-border: #23273a;
+      --gold-primary: #f1c40f;
+      --gold-gradient: linear-gradient(135deg, #ffd700 0%, #d4af37 100%);
+      --success: #00e676;
+      --error: #ff1744;
+      --warning: #ff9100;
+      --text-main: #f5f6fa;
+      --text-muted: #8e95a5;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      user-select: none;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    body {
+      font-family: 'Outfit', -apple-system, BlinkMacSystemFont, sans-serif;
+      background-color: var(--bg-dark);
+      color: var(--text-main);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow-x: hidden;
+    }
+
+    header {
+      background: #10121a;
+      border-bottom: 1px solid var(--card-border);
+      padding: 12px 16px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      position: sticky;
+      top: 0;
+      z-index: 50;
+    }
+
+    .brand-title {
+      font-size: 15px;
+      font-weight: 800;
+      color: var(--gold-primary);
+      letter-spacing: 0.5px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .stats-badge {
+      background: #1b1e2e;
+      border: 1px solid #2d324d;
+      padding: 6px 12px;
+      border-radius: 20px;
+      font-size: 13px;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .stats-badge span {
+      color: var(--success);
+      font-family: 'JetBrains Mono', monospace;
+      font-weight: 700;
+    }
+
+    .logout-btn {
+      background: transparent;
+      border: 1px solid #3a3f58;
+      color: var(--text-muted);
+      border-radius: 8px;
+      padding: 5px 10px;
+      font-size: 12px;
+      cursor: pointer;
+    }
+
+    main {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 16px;
+      max-width: 500px;
+      margin: 0 auto;
+      width: 100%;
+    }
+
+    .scanner-card {
+      width: 100%;
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 20px;
+      overflow: hidden;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+      position: relative;
+    }
+
+    #reader {
+      width: 100%;
+      min-height: 320px;
+      background: #000;
+      border-radius: 20px 20px 0 0;
+    }
+
+    #reader video {
+      object-fit: cover !important;
+      border-radius: 20px 20px 0 0;
+    }
+
+    .controls-bar {
+      padding: 14px 16px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: #141724;
+      border-top: 1px solid var(--card-border);
+    }
+
+    .control-btn {
+      background: #202438;
+      color: var(--text-main);
+      border: 1px solid #333a56;
+      border-radius: 10px;
+      padding: 10px 16px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .control-btn:active {
+      transform: scale(0.96);
+      background: #2a304a;
+    }
+
+    .status-hint {
+      margin-top: 16px;
+      font-size: 13px;
+      color: var(--text-muted);
+      text-align: center;
+    }
+
+    .modal-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.92);
+      backdrop-filter: blur(8px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+      z-index: 100;
+    }
+
+    .pin-card {
+      background: #161826;
+      border: 2px solid var(--gold-primary);
+      border-radius: 24px;
+      padding: 30px 24px;
+      width: 100%;
+      max-width: 360px;
+      text-align: center;
+      box-shadow: 0 15px 40px rgba(241, 196, 15, 0.15);
+    }
+
+    .pin-card h2 {
+      font-size: 20px;
+      color: var(--gold-primary);
+      margin-bottom: 6px;
+    }
+
+    .pin-card p {
+      font-size: 13px;
+      color: var(--text-muted);
+      margin-bottom: 24px;
+    }
+
+    .pin-input {
+      width: 100%;
+      background: #0d0e17;
+      border: 2px solid #2e334d;
+      border-radius: 12px;
+      padding: 14px;
+      font-size: 24px;
+      color: var(--gold-primary);
+      text-align: center;
+      letter-spacing: 8px;
+      font-family: 'JetBrains Mono', monospace;
+      outline: none;
+      margin-bottom: 20px;
+    }
+
+    .pin-input:focus {
+      border-color: var(--gold-primary);
+    }
+
+    .btn-submit {
+      width: 100%;
+      background: var(--gold-gradient);
+      color: #000;
+      border: none;
+      border-radius: 12px;
+      padding: 14px;
+      font-size: 16px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+
+    .result-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 90;
+      display: none;
+      flex-direction: column;
+      justify-content: space-between;
+      align-items: center;
+      padding: 40px 24px 30px;
+      text-align: center;
+      animation: fadeIn 0.25s cubic-bezier(0.1, 1, 0.1, 1);
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: scale(0.97); }
+      to { opacity: 1; transform: scale(1); }
+    }
+
+    .result-success {
+      background: radial-gradient(circle at center, #004d25 0%, #001f0f 100%);
+      border: 3px solid var(--success);
+    }
+
+    .result-error {
+      background: radial-gradient(circle at center, #590011 0%, #200006 100%);
+      border: 3px solid var(--error);
+    }
+
+    .result-icon {
+      font-size: 64px;
+      margin-bottom: 12px;
+    }
+
+    .result-title {
+      font-size: 32px;
+      font-weight: 800;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      margin-bottom: 12px;
+    }
+
+    .result-name {
+      font-size: 24px;
+      font-weight: 700;
+      color: #ffffff;
+      margin-bottom: 6px;
+    }
+
+    .result-sub {
+      font-size: 16px;
+      color: #e0e0e0;
+      margin-bottom: 20px;
+    }
+
+    .result-badge {
+      display: inline-block;
+      padding: 8px 20px;
+      border-radius: 30px;
+      font-size: 18px;
+      font-weight: 700;
+      font-family: 'JetBrains Mono', monospace;
+      margin-bottom: 20px;
+    }
+
+    .badge-success { background: rgba(0, 230, 118, 0.2); color: var(--success); border: 1px solid var(--success); }
+    .badge-error { background: rgba(255, 23, 68, 0.2); color: var(--error); border: 1px solid var(--error); }
+
+    .result-dismiss-btn {
+      width: 100%;
+      max-width: 320px;
+      padding: 16px;
+      font-size: 18px;
+      font-weight: 800;
+      border-radius: 14px;
+      border: none;
+      cursor: pointer;
+      background: #ffffff;
+      color: #000000;
+      box-shadow: 0 10px 25px rgba(0,0,0,0.4);
+    }
+
+    .capacity-modal {
+      background: #171a29;
+      border: 2px solid var(--gold-primary);
+      border-radius: 20px;
+      padding: 24px;
+      width: 100%;
+      max-width: 380px;
+      text-align: center;
+    }
+
+    .capacity-selector {
+      display: flex;
+      justify-content: center;
+      gap: 10px;
+      margin: 20px 0;
+      flex-wrap: wrap;
+    }
+
+    .cap-btn {
+      background: #24293f;
+      border: 2px solid #3c4468;
+      color: #ffffff;
+      width: 52px;
+      height: 52px;
+      border-radius: 14px;
+      font-size: 20px;
+      font-weight: 700;
+      font-family: 'JetBrains Mono', monospace;
+      cursor: pointer;
+    }
+
+    .cap-btn.selected {
+      background: var(--gold-primary);
+      border-color: #ffffff;
+      color: #000;
+    }
+
+    .spinner {
+      border: 3px solid rgba(255, 255, 255, 0.1);
+      border-top: 3px solid var(--gold-primary);
+      border-radius: 50%;
+      width: 24px;
+      height: 24px;
+      animation: spin 0.8s linear infinite;
+      display: inline-block;
+      vertical-align: middle;
+      margin-right: 8px;
+    }
+
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+  </style>
+</head>
+<body>
+
+  <header>
+    <div class="brand-title">👑 THE MAHARAJA</div>
+    <div class="stats-badge" id="statsDisplay">
+      Entered: <span id="enteredCount">--</span> / <span id="expectedCount">--</span>
+    </div>
+    <button class="logout-btn" onclick="logoutPin()">PIN</button>
+  </header>
+
+  <main>
+    <div class="scanner-card">
+      <div id="reader"></div>
+      <div class="controls-bar">
+        <button class="control-btn" id="flipCameraBtn" onclick="switchCamera()">
+          📷 Flip Camera
+        </button>
+        <span id="scanStatusIndicator" style="font-size: 12px; color: var(--gold-primary);">
+          ● Ready to scan
+        </span>
+      </div>
+    </div>
+
+    <div class="status-hint">
+      Point camera at the attendee's Ticket QR code.
+    </div>
+  </main>
+
+  <div class="modal-overlay" id="pinModal">
+    <div class="pin-card">
+      <h2>Staff Access</h2>
+      <p>Enter 4-digit security PIN to unlock gate scanner</p>
+      <input type="password" id="pinInput" class="pin-input" maxlength="6" placeholder="••••" inputmode="numeric" autofocus>
+      <button class="btn-submit" onclick="submitPin()">UNLOCK SCANNER</button>
+    </div>
+  </div>
+
+  <div class="result-overlay result-success" id="successOverlay">
+    <div>
+      <div class="result-icon">✅</div>
+      <div class="result-title" style="color: #00e676;">ENTRY ALLOWED</div>
+      <div class="result-name" id="succName">Attendee Name</div>
+      <div class="result-sub" id="succType">Couple Ticket (Qty: 1)</div>
+      <div class="result-badge badge-success" id="succCountBadge">2 / 2 Entered</div>
+      <div style="font-size: 13px; color: #a3e9c2;" id="succTime">Time: --:--</div>
+    </div>
+    <button class="result-dismiss-btn" onclick="closeOverlayAndResume()">NEXT SCAN</button>
+  </div>
+
+  <div class="result-overlay result-error" id="errorOverlay">
+    <div>
+      <div class="result-icon">⛔</div>
+      <div class="result-title" id="errTitle" style="color: #ff1744;">ENTRY REJECTED</div>
+      <div class="result-name" id="errReason">INVALID TICKET</div>
+      <div class="result-sub" id="errDetails" style="color: #ffcdd2;">--</div>
+      <div class="result-badge badge-error" id="errBadge" style="display: none;">ALREADY USED</div>
+    </div>
+    <button class="result-dismiss-btn" onclick="closeOverlayAndResume()">SCAN AGAIN</button>
+  </div>
+
+  <div class="modal-overlay" id="capacityModal" style="display: none;">
+    <div class="capacity-modal">
+      <h3 style="color: var(--gold-primary); font-size: 18px; margin-bottom: 6px;">Ticket Verified</h3>
+      <div style="font-size: 16px; font-weight: 700; color: #fff;" id="capName">Attendee Name</div>
+      <div style="font-size: 13px; color: var(--text-muted); margin-bottom: 15px;" id="capType">Family (4 Persons)</div>
+      
+      <p style="font-size: 14px; color: #e0e0e0;">Remaining to admit: <b style="color: var(--success);" id="capRemaining">4</b></p>
+      <div style="font-size: 13px; color: var(--gold-primary); margin-top: 10px;">Admit how many persons now?</div>
+      
+      <div class="capacity-selector" id="capacityButtons"></div>
+
+      <button class="btn-submit" id="confirmAdmitBtn" onclick="confirmAdmittance()">CONFIRM ENTRY</button>
+    </div>
+  </div>
+
+  <script>
+    // ✅ Aapka Web App URL already connected hai
+    const WEBAPP_URL = "https://script.google.com/macros/s/AKfycbxmWpF75IFEQgzvo83dRFVAL71qMsZv3nZT41aPMlOBAnlY0XMUHJLiexPrrdVlsXeogg/exec";
+
+    let html5QrCode = null;
+    let currentCameraId = null;
+    let availableCameras = [];
+    let isScanning = false;
+    let scanCooldown = false;
+    let pendingScanData = null;
+    let selectedAdmitCount = 1;
+    let statsTimer = null;
+
+    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+    function playSuccessChime() {
+      try {
+        if (audioCtx.state === 'suspended') audioCtx.resume();
+        const now = audioCtx.currentTime;
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(880, now);
+        osc.frequency.exponentialRampToValueAtTime(1174.66, now + 0.15);
+
+        gain.gain.setValueAtTime(0.3, now);
+        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.3);
+
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.start(now);
+        osc.stop(now + 0.3);
+
+        if (navigator.vibrate) navigator.vibrate(200);
+      } catch (e) {}
+    }
+
+    function playErrorBuzzer() {
+      try {
+        if (audioCtx.state === 'suspended') audioCtx.resume();
+        const now = audioCtx.currentTime;
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(160, now);
+        osc.frequency.setValueAtTime(120, now + 0.12);
+
+        gain.gain.setValueAtTime(0.4, now);
+        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.35);
+
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.start(now);
+        osc.stop(now + 0.35);
+
+        if (navigator.vibrate) navigator.vibrate([200, 100, 200]);
+      } catch (e) {}
+    }
+
+    function checkPinOnLoad() {
+      const storedPin = sessionStorage.getItem("STAFF_PIN");
+      if (!storedPin) {
+        document.getElementById("pinModal").style.display = "flex";
+      } else {
+        document.getElementById("pinModal").style.display = "none";
+        initScanner();
+        startStatsPolling();
+      }
+    }
+
+    function submitPin() {
+      const pin = document.getElementById("pinInput").value.trim();
+      if (!pin) {
+        alert("Please enter PIN");
+        return;
+      }
+      sessionStorage.setItem("STAFF_PIN", pin);
+      document.getElementById("pinModal").style.display = "none";
+      initScanner();
+      startStatsPolling();
+    }
+
+    function logoutPin() {
+      sessionStorage.removeItem("STAFF_PIN");
+      location.reload();
+    }
+
+    function initScanner() {
+      html5QrCode = new Html5Qrcode("reader");
+
+      Html5Qrcode.getCameras().then(cameras => {
+        if (cameras && cameras.length) {
+          availableCameras = cameras;
+          let backCam = cameras.find(c => c.label.toLowerCase().includes("back") || c.label.toLowerCase().includes("environment"));
+          currentCameraId = backCam ? backCam.id : cameras[0].id;
+          startCamera(currentCameraId);
+        } else {
+          alert("No camera found on this device.");
+        }
+      }).catch(err => {
+        console.error("Camera error", err);
+        alert("Please allow camera permission in browser.");
+      });
+    }
+
+    function startCamera(cameraId) {
+      isScanning = true;
+      document.getElementById("scanStatusIndicator").innerText = "● Scanning Active";
+      
+      html5QrCode.start(
+        cameraId,
+        { fps: 15, qrbox: { width: 250, height: 250 }, aspectRatio: 1.0 },
+        onQrCodeScanned,
+        onScanError
+      ).catch(err => console.error(err));
+    }
+
+    function switchCamera() {
+      if (!availableCameras || availableCameras.length < 2) {
+        alert("Only one camera detected on this device.");
+        return;
+      }
+      let currentIndex = availableCameras.findIndex(c => c.id === currentCameraId);
+      let nextIndex = (currentIndex + 1) % availableCameras.length;
+      currentCameraId = availableCameras[nextIndex].id;
+
+      if (html5QrCode && isScanning) {
+        html5QrCode.stop().then(() => startCamera(currentCameraId));
+      }
+    }
+
+    function onScanError(errorMessage) {}
+
+    function onQrCodeScanned(decodedText) {
+      if (scanCooldown) return;
+      scanCooldown = true;
+
+      document.getElementById("scanStatusIndicator").innerHTML = '<span class="spinner"></span> Verifying...';
+
+      const staffPin = sessionStorage.getItem("STAFF_PIN") || "";
+      const trimmedToken = decodedText.trim();
+      const checkUrl = `${WEBAPP_URL}?action=check&pin=${encodeURIComponent(staffPin)}&token=${encodeURIComponent(trimmedToken)}`;
+
+      fetch(checkUrl)
+        .then(res => res.json())
+        .then(data => {
+          if (!data.ok) {
+            handleScanRejection(data);
+          } else {
+            handleScanSuccessCheck(data, trimmedToken);
+          }
+        })
+        .catch(netErr => {
+          playErrorBuzzer();
+          showErrorScreen("NETWORK ERROR", "Failed to connect to Sheet backend. Please retry.");
+        });
+    }
+
+    function handleScanRejection(data) {
+      playErrorBuzzer();
+      let title = "ENTRY REJECTED";
+      let reason = data.msg || "INVALID TICKET";
+      let details = "";
+      let isUsed = (data.msg === "ALREADY USED");
+
+      if (isUsed) {
+        details = `Name: ${data.name || 'Unknown'} | Type: ${data.type || ''}<br>Already checked-in at: ${data.time || 'Earlier'}`;
+      } else if (data.msg === "PAYMENT NOT VERIFIED") {
+        details = `Attendee: ${data.name || 'Unknown'}<br>Payment is not marked Verified in Sheet.`;
+      } else if (data.msg === "WRONG PIN") {
+        details = "The entered Staff PIN is incorrect. Re-enter PIN.";
+      } else {
+        details = "This QR code signature is invalid or not in database.";
+      }
+
+      showErrorScreen(title, reason, details, isUsed);
+    }
+
+    function handleScanSuccessCheck(data, token) {
+      pendingScanData = {
+        token: token,
+        total: data.total,
+        remaining: data.remaining,
+        name: data.name,
+        type: data.type
+      };
+
+      if (data.remaining > 1) {
+        showCapacityModal(data);
+      } else {
+        executeAdmit(token, 1);
+      }
+    }
+
+    function showCapacityModal(data) {
+      document.getElementById("capName").innerText = data.name;
+      document.getElementById("capType").innerText = `${data.type} (Total: ${data.total})`;
+      document.getElementById("capRemaining").innerText = data.remaining;
+
+      const container = document.getElementById("capacityButtons");
+      container.innerHTML = "";
+      selectedAdmitCount = data.remaining;
+
+      for (let i = 1; i <= data.remaining; i++) {
+        const btn = document.createElement("button");
+        btn.className = `cap-btn ${i === data.remaining ? 'selected' : ''}`;
+        btn.innerText = i;
+        btn.onclick = () => {
+          document.querySelectorAll('.cap-btn').forEach(b => b.classList.remove('selected'));
+          btn.classList.add('selected');
+          selectedAdmitCount = i;
+        };
+        container.appendChild(btn);
+      }
+
+      document.getElementById("capacityModal").style.display = "flex";
+    }
+
+    function confirmAdmittance() {
+      document.getElementById("capacityModal").style.display = "none";
+      if (!pendingScanData) return;
+      executeAdmit(pendingScanData.token, selectedAdmitCount);
+    }
+
+    function executeAdmit(token, count) {
+      const staffPin = sessionStorage.getItem("STAFF_PIN") || "";
+      const admitUrl = `${WEBAPP_URL}?action=admit&pin=${encodeURIComponent(staffPin)}&token=${encodeURIComponent(token)}&n=${count}`;
+
+      document.getElementById("scanStatusIndicator").innerHTML = '<span class="spinner"></span> Admitting...';
+
+      fetch(admitUrl)
+        .then(res => res.json())
+        .then(data => {
+          if (data.ok) {
+            playSuccessChime();
+            showSuccessScreen(data);
+            fetchLiveStats();
+          } else {
+            handleScanRejection(data);
+          }
+        })
+        .catch(err => {
+          playErrorBuzzer();
+          showErrorScreen("NETWORK ERROR", "Network dropped during admission. Retry.");
+        });
+    }
+
+    function showSuccessScreen(data) {
+      document.getElementById("succName").innerText = data.name;
+      document.getElementById("succType").innerText = `${data.type} Ticket`;
+      document.getElementById("succCountBadge").innerText = `${data.entered} / ${data.total} ENTERED (+${data.admitted} Admitted)`;
+      document.getElementById("succTime").innerText = `Admitted at: ${data.time}`;
+      document.getElementById("successOverlay").style.display = "flex";
+    }
+
+    function showErrorScreen(title, reason, details, isUsed) {
+      document.getElementById("errTitle").innerText = title;
+      document.getElementById("errReason").innerText = reason;
+      document.getElementById("errDetails").innerHTML = details;
+      
+      const badge = document.getElementById("errBadge");
+      if (isUsed) {
+        badge.style.display = "inline-block";
+        badge.innerText = "ALREADY CHECKED IN";
+      } else {
+        badge.style.display = "none";
+      }
+
+      document.getElementById("errorOverlay").style.display = "flex";
+    }
+
+    function closeOverlayAndResume() {
+      document.getElementById("successOverlay").style.display = "none";
+      document.getElementById("errorOverlay").style.display = "none";
+      document.getElementById("capacityModal").style.display = "none";
+      pendingScanData = null;
+
+      setTimeout(() => {
+        scanCooldown = false;
+        document.getElementById("scanStatusIndicator").innerText = "● Ready to scan";
+      }, 500);
+    }
+
+    function startStatsPolling() {
+      fetchLiveStats();
+      if (statsTimer) clearInterval(statsTimer);
+      statsTimer = setInterval(fetchLiveStats, 30000);
+    }
+
+    function fetchLiveStats() {
+      const staffPin = sessionStorage.getItem("STAFF_PIN");
+      if (!staffPin) return;
+
+      fetch(`${WEBAPP_URL}?action=stats&pin=${encodeURIComponent(staffPin)}`)
+        .then(res => res.json())
+        .then(data => {
+          if (data.ok) {
+            document.getElementById("enteredCount").innerText = data.entered;
+            document.getElementById("expectedCount").innerText = data.expected;
+          }
+        })
+        .catch(e => console.log("Stats error", e));
+    }
+
+    window.addEventListener("DOMContentLoaded", checkPinOnLoad);
+  </script>
+</body>
+</html>
