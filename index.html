@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>The Maharaja Events - Gate Scanner</title>
-  
+
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
@@ -29,7 +29,14 @@
       margin: 0;
       padding: 0;
       user-select: none;
+      -webkit-user-select: none;
       -webkit-tap-highlight-color: transparent;
+    }
+
+    /* iOS/Safari: inputs must stay selectable or typing fails */
+    input {
+      user-select: text;
+      -webkit-user-select: text;
     }
 
     body {
@@ -134,6 +141,11 @@
       border-top: 1px solid var(--card-border);
     }
 
+    .gallery-bar {
+      padding: 0 16px 14px;
+      background: #141724;
+    }
+
     .control-btn {
       background: #202438;
       color: var(--text-main);
@@ -146,6 +158,12 @@
       display: flex;
       align-items: center;
       gap: 6px;
+      font-family: inherit;
+    }
+
+    .control-btn.full {
+      width: 100%;
+      justify-content: center;
     }
 
     .control-btn:active {
@@ -224,6 +242,7 @@
       font-size: 16px;
       font-weight: 700;
       cursor: pointer;
+      font-family: inherit;
     }
 
     .result-overlay {
@@ -272,12 +291,14 @@
       font-weight: 700;
       color: #ffffff;
       margin-bottom: 6px;
+      word-break: break-word;
     }
 
     .result-sub {
       font-size: 16px;
       color: #e0e0e0;
       margin-bottom: 20px;
+      word-break: break-word;
     }
 
     .result-badge {
@@ -305,6 +326,7 @@
       background: #ffffff;
       color: #000000;
       box-shadow: 0 10px 25px rgba(0,0,0,0.4);
+      font-family: inherit;
     }
 
     .capacity-modal {
@@ -383,18 +405,25 @@
           ● Ready to scan
         </span>
       </div>
+      <div class="gallery-bar">
+        <button class="control-btn full" id="galleryBtn">📁 Scan from Gallery</button>
+        <input type="file" id="qrFile" accept="image/*" hidden>
+      </div>
     </div>
 
     <div class="status-hint">
-      Point camera at the attendee's Ticket QR code.
+      Point camera at the attendee's Ticket QR code, or pick a ticket image from gallery.
     </div>
   </main>
+
+  <!-- Hidden element used only for gallery image decoding -->
+  <div id="file-reader" style="position:absolute;width:1px;height:1px;opacity:0;overflow:hidden;pointer-events:none;"></div>
 
   <div class="modal-overlay" id="pinModal">
     <div class="pin-card">
       <h2>Staff Access</h2>
-      <p>Enter 4-digit security PIN to unlock gate scanner</p>
-      <input type="password" id="pinInput" class="pin-input" maxlength="6" placeholder="••••" inputmode="numeric" autofocus>
+      <p>Enter staff PIN to unlock gate scanner</p>
+      <input type="password" id="pinInput" class="pin-input" maxlength="12" placeholder="••••••" inputmode="numeric" autocomplete="off" autofocus>
       <button class="btn-submit" onclick="submitPin()">UNLOCK SCANNER</button>
     </div>
   </div>
@@ -425,21 +454,22 @@
   <div class="modal-overlay" id="capacityModal" style="display: none;">
     <div class="capacity-modal">
       <h3 style="color: var(--gold-primary); font-size: 18px; margin-bottom: 6px;">Ticket Verified</h3>
-      <div style="font-size: 16px; font-weight: 700; color: #fff;" id="capName">Attendee Name</div>
+      <div style="font-size: 16px; font-weight: 700; color: #fff; word-break: break-word;" id="capName">Attendee Name</div>
       <div style="font-size: 13px; color: var(--text-muted); margin-bottom: 15px;" id="capType">Family (4 Persons)</div>
-      
+
       <p style="font-size: 14px; color: #e0e0e0;">Remaining to admit: <b style="color: var(--success);" id="capRemaining">4</b></p>
       <div style="font-size: 13px; color: var(--gold-primary); margin-top: 10px;">Admit how many persons now?</div>
-      
+
       <div class="capacity-selector" id="capacityButtons"></div>
 
       <button class="btn-submit" id="confirmAdmitBtn" onclick="confirmAdmittance()">CONFIRM ENTRY</button>
+      <button class="control-btn full" style="margin-top:10px;" onclick="closeOverlayAndResume()">CANCEL</button>
     </div>
   </div>
 
   <script>
-    // ✅ Aapka Web App URL already connected hai
-    const WEBAPP_URL = "https://script.google.com/macros/s/AKfycbxmWpF75IFEQgzvo83dRFVAL71qMsZv3nZT41aPMlOBAnlY0XMUHJLiexPrrdVlsXeogg/exec";
+    // Apna Web App URL (sirf yehi config hai, PIN/SECRET yahan kabhi mat likhna)
+    const WEBAPP_URL = "https://script.google.com/macros/s/AKfycbxmWpF75IFEQgzvo83dRFVAL71qMsZv3nZT41aPMlOBAnlY0XMUHJZiexPrrdVlsXeogg/exec";
 
     let html5QrCode = null;
     let currentCameraId = null;
@@ -449,6 +479,14 @@
     let pendingScanData = null;
     let selectedAdmitCount = 1;
     let statsTimer = null;
+    let needPinReset = false;
+
+    // Escape any server/user text before putting it into HTML (XSS protection)
+    function esc(s) {
+      return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) {
+        return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
+      });
+    }
 
     const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
 
@@ -529,31 +567,37 @@
     function initScanner() {
       html5QrCode = new Html5Qrcode("reader");
 
-      Html5Qrcode.getCameras().then(cameras => {
+      Html5Qrcode.getCameras().then(function (cameras) {
         if (cameras && cameras.length) {
           availableCameras = cameras;
-          let backCam = cameras.find(c => c.label.toLowerCase().includes("back") || c.label.toLowerCase().includes("environment"));
-          currentCameraId = backCam ? backCam.id : cameras[0].id;
+          let backCam = cameras.find(function (c) {
+            const l = (c.label || "").toLowerCase();
+            return l.includes("back") || l.includes("environment") || l.includes("rear");
+          });
+          currentCameraId = backCam ? backCam.id : cameras[cameras.length - 1].id;
           startCamera(currentCameraId);
         } else {
-          alert("No camera found on this device.");
+          alert("No camera found on this device. You can still use 'Scan from Gallery'.");
         }
-      }).catch(err => {
+      }).catch(function (err) {
         console.error("Camera error", err);
-        alert("Please allow camera permission in browser.");
+        alert("Please allow camera permission in browser (page must be opened via https link). You can still use 'Scan from Gallery'.");
       });
     }
 
     function startCamera(cameraId) {
       isScanning = true;
       document.getElementById("scanStatusIndicator").innerText = "● Scanning Active";
-      
+
       html5QrCode.start(
         cameraId,
         { fps: 15, qrbox: { width: 250, height: 250 }, aspectRatio: 1.0 },
         onQrCodeScanned,
         onScanError
-      ).catch(err => console.error(err));
+      ).catch(function (err) {
+        console.error(err);
+        isScanning = false;
+      });
     }
 
     function switchCamera() {
@@ -561,17 +605,43 @@
         alert("Only one camera detected on this device.");
         return;
       }
-      let currentIndex = availableCameras.findIndex(c => c.id === currentCameraId);
+      let currentIndex = availableCameras.findIndex(function (c) { return c.id === currentCameraId; });
       let nextIndex = (currentIndex + 1) % availableCameras.length;
       currentCameraId = availableCameras[nextIndex].id;
 
       if (html5QrCode && isScanning) {
-        html5QrCode.stop().then(() => startCamera(currentCameraId));
+        html5QrCode.stop().then(function () { startCamera(currentCameraId); });
       }
     }
 
     function onScanError(errorMessage) {}
 
+    // ---------- Gallery scan ----------
+    document.getElementById("galleryBtn").addEventListener("click", function () {
+      document.getElementById("qrFile").click();
+    });
+
+    document.getElementById("qrFile").addEventListener("change", async function (e) {
+      const file = e.target.files && e.target.files[0];
+      if (!file) return;
+      if (scanCooldown) { e.target.value = ""; return; }
+
+      let fileScanner = null;
+      try {
+        fileScanner = new Html5Qrcode("file-reader");
+        const text = await fileScanner.scanFile(file, false);
+        try { fileScanner.clear(); } catch (x) {}
+        onQrCodeScanned(text);
+      } catch (err) {
+        try { if (fileScanner) fileScanner.clear(); } catch (x) {}
+        scanCooldown = true;
+        playErrorBuzzer();
+        showErrorScreen("NO QR FOUND", "QR not found in image", "Try a clearer or full-screen ticket image.", false);
+      }
+      e.target.value = "";
+    });
+
+    // ---------- Scan flow ----------
     function onQrCodeScanned(decodedText) {
       if (scanCooldown) return;
       scanCooldown = true;
@@ -579,21 +649,21 @@
       document.getElementById("scanStatusIndicator").innerHTML = '<span class="spinner"></span> Verifying...';
 
       const staffPin = sessionStorage.getItem("STAFF_PIN") || "";
-      const trimmedToken = decodedText.trim();
-      const checkUrl = `${WEBAPP_URL}?action=check&pin=${encodeURIComponent(staffPin)}&token=${encodeURIComponent(trimmedToken)}`;
+      const trimmedToken = String(decodedText || "").trim();
+      const checkUrl = WEBAPP_URL + "?action=check&pin=" + encodeURIComponent(staffPin) + "&token=" + encodeURIComponent(trimmedToken);
 
       fetch(checkUrl)
-        .then(res => res.json())
-        .then(data => {
+        .then(function (res) { return res.json(); })
+        .then(function (data) {
           if (!data.ok) {
             handleScanRejection(data);
           } else {
             handleScanSuccessCheck(data, trimmedToken);
           }
         })
-        .catch(netErr => {
+        .catch(function (netErr) {
           playErrorBuzzer();
-          showErrorScreen("NETWORK ERROR", "Failed to connect to Sheet backend. Please retry.");
+          showErrorScreen("NETWORK ERROR", "Could not reach server", "Check internet and tap SCAN AGAIN. No entry was marked.", false);
         });
     }
 
@@ -605,11 +675,16 @@
       let isUsed = (data.msg === "ALREADY USED");
 
       if (isUsed) {
-        details = `Name: ${data.name || 'Unknown'} | Type: ${data.type || ''}<br>Already checked-in at: ${data.time || 'Earlier'}`;
+        details = "Name: " + esc(data.name || "Unknown") + " | Type: " + esc(data.type || "") +
+                  "<br>Already checked-in at: " + esc(data.time || "Earlier");
       } else if (data.msg === "PAYMENT NOT VERIFIED") {
-        details = `Attendee: ${data.name || 'Unknown'}<br>Payment is not marked Verified in Sheet.`;
+        details = "Attendee: " + esc(data.name || "Unknown") + "<br>Payment is not marked Verified in Sheet.";
       } else if (data.msg === "WRONG PIN") {
         details = "The entered Staff PIN is incorrect. Re-enter PIN.";
+        needPinReset = true;
+        sessionStorage.removeItem("STAFF_PIN");
+      } else if (data.msg === "TICKET NOT FOUND") {
+        details = "This ticket is not in the database.";
       } else {
         details = "This QR code signature is invalid or not in database.";
       }
@@ -626,7 +701,7 @@
         type: data.type
       };
 
-      if (data.remaining > 1) {
+      if (Number(data.remaining) > 1) {
         showCapacityModal(data);
       } else {
         executeAdmit(token, 1);
@@ -635,19 +710,20 @@
 
     function showCapacityModal(data) {
       document.getElementById("capName").innerText = data.name;
-      document.getElementById("capType").innerText = `${data.type} (Total: ${data.total})`;
+      document.getElementById("capType").innerText = data.type + " (Total: " + data.total + ")";
       document.getElementById("capRemaining").innerText = data.remaining;
 
       const container = document.getElementById("capacityButtons");
       container.innerHTML = "";
-      selectedAdmitCount = data.remaining;
+      const remaining = Number(data.remaining);
+      selectedAdmitCount = remaining;
 
-      for (let i = 1; i <= data.remaining; i++) {
+      for (let i = 1; i <= remaining; i++) {
         const btn = document.createElement("button");
-        btn.className = `cap-btn ${i === data.remaining ? 'selected' : ''}`;
+        btn.className = "cap-btn" + (i === remaining ? " selected" : "");
         btn.innerText = i;
-        btn.onclick = () => {
-          document.querySelectorAll('.cap-btn').forEach(b => b.classList.remove('selected'));
+        btn.onclick = function () {
+          document.querySelectorAll('.cap-btn').forEach(function (b) { b.classList.remove('selected'); });
           btn.classList.add('selected');
           selectedAdmitCount = i;
         };
@@ -665,13 +741,14 @@
 
     function executeAdmit(token, count) {
       const staffPin = sessionStorage.getItem("STAFF_PIN") || "";
-      const admitUrl = `${WEBAPP_URL}?action=admit&pin=${encodeURIComponent(staffPin)}&token=${encodeURIComponent(token)}&n=${count}`;
+      const admitUrl = WEBAPP_URL + "?action=admit&pin=" + encodeURIComponent(staffPin) +
+                       "&token=" + encodeURIComponent(token) + "&n=" + count;
 
       document.getElementById("scanStatusIndicator").innerHTML = '<span class="spinner"></span> Admitting...';
 
       fetch(admitUrl)
-        .then(res => res.json())
-        .then(data => {
+        .then(function (res) { return res.json(); })
+        .then(function (data) {
           if (data.ok) {
             playSuccessChime();
             showSuccessScreen(data);
@@ -680,25 +757,26 @@
             handleScanRejection(data);
           }
         })
-        .catch(err => {
+        .catch(function (err) {
           playErrorBuzzer();
-          showErrorScreen("NETWORK ERROR", "Network dropped during admission. Retry.");
+          showErrorScreen("NETWORK ERROR", "Network dropped during admission", "Do NOT let them in yet. Tap SCAN AGAIN and re-scan to confirm status.", false);
         });
     }
 
     function showSuccessScreen(data) {
-      document.getElementById("succName").innerText = data.name;
-      document.getElementById("succType").innerText = `${data.type} Ticket`;
-      document.getElementById("succCountBadge").innerText = `${data.entered} / ${data.total} ENTERED (+${data.admitted} Admitted)`;
-      document.getElementById("succTime").innerText = `Admitted at: ${data.time}`;
+      document.getElementById("succName").innerText = data.name || "";
+      document.getElementById("succType").innerText = (data.type || "") + " Ticket";
+      document.getElementById("succCountBadge").innerText = data.entered + " / " + data.total + " ENTERED (+" + data.admitted + " Admitted)";
+      document.getElementById("succTime").innerText = "Admitted at: " + (data.time || "");
       document.getElementById("successOverlay").style.display = "flex";
     }
 
     function showErrorScreen(title, reason, details, isUsed) {
+      details = details || "";
       document.getElementById("errTitle").innerText = title;
       document.getElementById("errReason").innerText = reason;
       document.getElementById("errDetails").innerHTML = details;
-      
+
       const badge = document.getElementById("errBadge");
       if (isUsed) {
         badge.style.display = "inline-block";
@@ -711,12 +789,17 @@
     }
 
     function closeOverlayAndResume() {
+      if (needPinReset) {
+        location.reload();
+        return;
+      }
+
       document.getElementById("successOverlay").style.display = "none";
       document.getElementById("errorOverlay").style.display = "none";
       document.getElementById("capacityModal").style.display = "none";
       pendingScanData = null;
 
-      setTimeout(() => {
+      setTimeout(function () {
         scanCooldown = false;
         document.getElementById("scanStatusIndicator").innerText = "● Ready to scan";
       }, 500);
@@ -732,16 +815,20 @@
       const staffPin = sessionStorage.getItem("STAFF_PIN");
       if (!staffPin) return;
 
-      fetch(`${WEBAPP_URL}?action=stats&pin=${encodeURIComponent(staffPin)}`)
-        .then(res => res.json())
-        .then(data => {
+      fetch(WEBAPP_URL + "?action=stats&pin=" + encodeURIComponent(staffPin))
+        .then(function (res) { return res.json(); })
+        .then(function (data) {
           if (data.ok) {
             document.getElementById("enteredCount").innerText = data.entered;
             document.getElementById("expectedCount").innerText = data.expected;
           }
         })
-        .catch(e => console.log("Stats error", e));
+        .catch(function (e) { console.log("Stats error", e); });
     }
+
+    document.getElementById("pinInput").addEventListener("keydown", function (e) {
+      if (e.key === "Enter") submitPin();
+    });
 
     window.addEventListener("DOMContentLoaded", checkPinOnLoad);
   </script>
